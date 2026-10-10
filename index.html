@@ -49,7 +49,7 @@ body {
   font: 15px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   -webkit-text-size-adjust: 100%;
 }
-.wrap { max-width: 1180px; margin: 0 auto; padding: 20px 16px 48px; }
+.wrap { max-width: 1680px; margin: 0 auto; padding: 20px 16px 48px; }
 h1 { font-size: clamp(1.3rem, 4vw, 1.8rem); margin: 0; letter-spacing: -0.02em; }
 h2 { font-size: 1.05rem; margin: 0 0 12px; }
 .sub { color: var(--muted); font-size: 0.875rem; margin: 4px 0 0; }
@@ -106,7 +106,11 @@ header { display: flex; justify-content: space-between; align-items: flex-start;
 .lists button:hover { color: var(--text); }
 .lists button[aria-selected="true"] { color: var(--accent); border-bottom-color: var(--accent); }
 .lists button span { margin-left: 6px; padding: 1px 8px; border-radius: 999px; font-size: 0.75rem; background: var(--line-soft); color: var(--muted); }
-.hint { margin: 0; padding: 10px 16px; font-size: 0.82rem; color: var(--muted); }
+.hint-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 8px 16px; }
+.hint { margin: 0; font-size: 0.82rem; color: var(--muted); }
+.viewmode { display: none; flex: none; padding: 3px; border: 1px solid var(--line); border-radius: 9px; }
+.viewmode button { border: 0; border-radius: 6px; background: none; color: var(--muted); font: inherit; font-size: 0.8rem; font-weight: 600; padding: 5px 10px; cursor: pointer; }
+.viewmode button[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); }
 table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
 th {
   text-align: left; font-size: 0.68rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em;
@@ -181,24 +185,48 @@ details.method summary { font-weight: 600; cursor: pointer; }
 details.method li { margin: 6px 0; }
 footer { margin-top: 20px; font-size: 0.78rem; color: var(--muted); text-align: center; }
 
+/* Wide screens: filters and summary stay pinned beside the table. */
+@media (min-width: 1400px) {
+  .layout { display: grid; grid-template-columns: 350px minmax(0, 1fr); gap: 24px; align-items: start; }
+  .side { position: sticky; top: 16px; }
+  .kpis { grid-template-columns: 1fr 1fr; }
+  .filters { grid-template-columns: 1fr 1fr; margin-bottom: 0; }
+  .filters .search { grid-column: 1 / -1; }
+}
+/* Tablets, foldables and phones: the full table no longer fits, so rows show
+   rank, school and score, either alone (compact) or with the stats stacked
+   underneath (detailed). */
+@media (max-width: 1100px) {
+  .filters { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .sort-field { display: block; }
+  .col-wide, thead tr { display: none; }
+  .history thead tr { display: table-row; }
+  .school small { display: block; }
+  .score { font-size: 1.05rem; }
+  .viewmode { display: flex; }
+  #t-ranked.detailed, #t-ranked.detailed tbody { display: block; }
+  #t-ranked.detailed tr.row { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; padding: 12px; border-top: 1px solid var(--line-soft); }
+  #t-ranked.detailed td { border: 0; padding: 0; }
+  #t-ranked.detailed .rank { order: 1; min-width: 32px; }
+  #t-ranked.detailed .school { order: 2; flex: 1 1 calc(100% - 150px); min-width: 0; }
+  #t-ranked.detailed .score { order: 3; }
+  #t-ranked.detailed td.stat { display: block; order: 4; flex: 1 1 110px; margin-top: 8px; text-align: left; font-weight: 600; }
+  #t-ranked.detailed td.stat::before { content: attr(data-label); display: block; font-size: 0.66rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }
+  #t-ranked.detailed .bar { max-width: 110px; }
+}
 @media (max-width: 900px) {
   .kpis { grid-template-columns: repeat(2, 1fr); }
   .filters { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .filters .search { grid-column: 1 / -1; }
+  .filters .search, .sort-field { grid-column: 1 / -1; }
 }
 @media (max-width: 720px) {
   .kpi .value { font-size: 1.35rem; }
   .podium { grid-template-columns: 1fr; gap: 10px; }
   .medal.first, .medal.second, .medal.third { order: 0; }
   .medal { min-height: 0; }
-  .sort-field { display: block; grid-column: 1 / -1; }
-  .col-wide, thead tr { display: none; }
-  .history thead tr { display: table-row; }
-  .school small { display: block; }
   td { padding: 11px 10px; }
   .boxes { grid-template-columns: 1fr; }
   .modal { padding: 18px; }
-  .score { font-size: 1.05rem; }
 }
 </style>
 </head>
@@ -224,6 +252,8 @@ footer { margin-top: 20px; font-size: 0.78rem; color: var(--muted); text-align: 
     <button role="tab" data-view="grad" aria-selected="false">Secondary<small>Graduation Assessments</small></button>
   </div>
 
+  <div class="layout">
+  <aside class="side">
   <section class="kpis" id="kpis"></section>
 
   <section class="filters card">
@@ -240,6 +270,9 @@ footer { margin-top: 20px; font-size: 0.78rem; color: var(--muted); text-align: 
     <div class="search"><label for="f-search">Search</label><input id="f-search" type="search" placeholder="School or district name…" autocomplete="off"></div>
     <div class="sort-field"><label for="f-sort">Sort by</label><select id="f-sort"></select></div>
   </section>
+  </aside>
+
+  <div class="main">
 
   <section>
     <h2 id="podium-title"></h2>
@@ -251,7 +284,13 @@ footer { margin-top: 20px; font-size: 0.78rem; color: var(--muted); text-align: 
       <button role="tab" data-list="ranked">Ranked leaderboard<span id="n-ranked"></span></button>
       <button role="tab" data-list="excluded">Masked &amp; excluded schools<span id="n-excluded"></span></button>
     </div>
-    <p class="hint" id="hint"></p>
+    <div class="hint-row">
+      <p class="hint" id="hint"></p>
+      <div class="viewmode" id="viewmode" role="group" aria-label="Row layout">
+        <button data-rows="compact">Compact</button>
+        <button data-rows="detailed">Detailed</button>
+      </div>
+    </div>
     <table id="t-ranked">
       <thead><tr id="thead"></tr></thead>
       <tbody id="tbody"></tbody>
@@ -270,6 +309,8 @@ footer { margin-top: 20px; font-size: 0.78rem; color: var(--muted); text-align: 
     <summary>How these numbers are calculated</summary>
     <ul id="method"></ul>
   </details>
+  </div>
+  </div>
 
   <footer>
     Source: BC Ministry of Education and Child Care open data (school-level results, all students).
@@ -578,6 +619,7 @@ footer { margin-top: 20px; font-size: 0.78rem; color: var(--muted); text-align: 
     document.querySelectorAll('.lists button').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.list === st.list)));
     $('t-ranked').hidden = !ranked;
     $('t-excluded').hidden = ranked;
+    $('viewmode').hidden = !ranked;
     $('hint').textContent = ranked
       ? 'Select any school for its full results.'
       : 'These schools appear in the Ministry data for this year but cannot be ranked.';
@@ -599,11 +641,11 @@ footer { margin-top: 20px; font-size: 0.78rem; color: var(--muted); text-align: 
         '<td class="school">' + esc(school.name) + '<small>' + esc(school.districtLabel) + ' · ' + SECTOR[school.sector] + '</small></td>' +
         '<td class="col-wide muted">' + esc(school.districtLabel) + '</td>' +
         '<td class="col-wide">' + badge + '</td>' +
-        '<td class="col-wide r num">' + cellWithNote(view, row, 'a') + '</td>' +
-        '<td class="col-wide r num">' + cellWithNote(view, row, 'b') + '</td>' +
-        '<td class="col-wide r num">' + (row.part == null ? '—' : row.part.toFixed(1) + '%') + bar + '</td>' +
+        '<td class="col-wide stat r num" data-label="' + esc(view.a.label) + '">' + cellWithNote(view, row, 'a') + '</td>' +
+        '<td class="col-wide stat r num" data-label="' + esc(view.b.label) + '">' + cellWithNote(view, row, 'b') + '</td>' +
+        '<td class="col-wide stat r num" data-label="Participation">' + (row.part == null ? '—' : row.part.toFixed(1) + '%') + bar + '</td>' +
         '<td class="r num score">' + fmt(row.score, view.scoreDigits) + '</td>' +
-        '<td class="col-wide c">' + trend(view, row) + '</td></tr>';
+        '<td class="col-wide stat c" data-label="' + esc(view.trendLabel) + '">' + trend(view, row) + '</td></tr>';
     }).join('');
     $('empty').hidden = listed.length > 0;
     $('more').hidden = listed.length <= st.shown;
@@ -649,6 +691,22 @@ footer { margin-top: 20px; font-size: 0.78rem; color: var(--muted); text-align: 
   $('dialog').onclick = (e) => { if (e.target === $('dialog') || e.target.closest('[data-close]')) $('dialog').close(); };
   document.querySelectorAll('.lists button').forEach((button) => {
     button.onclick = () => update({ list: button.dataset.list });
+  });
+
+  // Row layout on narrower screens: compact rows, or detailed rows with the stats
+  // stacked underneath. Roomier screens start detailed; the pick is remembered.
+  function showRows(mode) {
+    $('t-ranked').classList.toggle('detailed', mode === 'detailed');
+    document.querySelectorAll('[data-rows]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.rows === mode)));
+  }
+  let savedRows = null;
+  try { savedRows = localStorage.getItem('rows'); } catch (e) {}
+  showRows(savedRows === 'compact' || savedRows === 'detailed' ? savedRows : matchMedia('(min-width: 600px)').matches ? 'detailed' : 'compact');
+  document.querySelectorAll('[data-rows]').forEach((button) => {
+    button.onclick = () => {
+      try { localStorage.setItem('rows', button.dataset.rows); } catch (e) {}
+      showRows(button.dataset.rows);
+    };
   });
 
   // Theme: follows the system until the visitor picks one, then remembers the pick.
