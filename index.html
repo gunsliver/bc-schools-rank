@@ -418,6 +418,11 @@ footer { margin-top: 20px; font-size: 0.78rem; color: var(--muted); text-align: 
     'Only one of the two skills was reported',
   ];
 
+  // District numbers listed first in the District filter, in this order:
+  // Vancouver, Richmond, Burnaby, North Vancouver, West Vancouver, Coquitlam,
+  // Surrey, New Westminster, Delta, Langley.
+  const POPULAR_DISTRICTS = ['039', '038', '041', '044', '045', '043', '036', '040', '037', '035'];
+
   const SORTS = [
     ['rank', 'Rank'], ['name', 'School name'], ['score', null], ['a', null], ['b', null], ['part', 'Participation'],
   ];
@@ -550,8 +555,11 @@ footer { margin-top: 20px; font-size: 0.78rem; color: var(--muted); text-align: 
     const used = new Set(view.schools.map((s) => s.district));
     const districts = [...used].map((n) => [n, view.schools.find((s) => s.district === n).districtLabel])
       .sort((x, y) => x[1].localeCompare(y[1]));
+    const option = ([n, label]) => '<option value="' + n + '">' + esc(label) + '</option>';
+    const popular = POPULAR_DISTRICTS.map((n) => districts.find((d) => d[0] === n)).filter(Boolean);
     $('f-district').innerHTML = '<option value="">All districts</option>' +
-      districts.map(([n, label]) => '<option value="' + n + '">' + esc(label) + '</option>').join('');
+      '<optgroup label="Popular">' + popular.map(option).join('') + '</optgroup>' +
+      '<optgroup label="All districts A–Z">' + districts.map(option).join('') + '</optgroup>';
     $('f-sort').innerHTML = SORTS.map(([field, label]) =>
       '<option value="' + field + '">' + esc(label || (field === 'score' ? view.scoreLabel : view[field].label)) + '</option>').join('');
     $('f-year').value = st.year; $('f-group').value = st.group; $('f-sector').value = st.sector;
