@@ -1,0 +1,689 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BC School Academic Performance Dashboard</title>
+<meta name="description" content="Rankings of British Columbia schools from the public Foundation Skills Assessment and Graduation Assessment results.">
+<script>
+  // Apply a saved light/dark choice before the page paints. No saved choice means "follow the system".
+  try {
+    var savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'light' || savedTheme === 'dark') document.documentElement.dataset.theme = savedTheme;
+  } catch (e) {}
+</script>
+<style>
+:root {
+  --bg: #f8fafc; --card: #ffffff; --line: #e2e8f0; --line-soft: #f1f5f9;
+  --text: #0f172a; --muted: #64748b; --faint: #94a3b8;
+  --accent: #4f46e5; --accent-soft: #eef2ff;
+  --gold: #d97706; --gold-soft: #fffbeb; --gold-line: #fcd34d;
+  --pub-bg: #dbeafe; --pub-fg: #1d4ed8; --ind-bg: #f3e8ff; --ind-fg: #7e22ce;
+  --up: #059669; --down: #dc2626;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0b1120; --card: #131c2e; --line: #26324a; --line-soft: #1b2538;
+    --text: #e2e8f0; --muted: #94a3b8; --faint: #64748b;
+    --accent: #a5b4fc; --accent-soft: #1e1b4b;
+    --gold: #fbbf24; --gold-soft: #2a2110; --gold-line: #92610c;
+    --pub-bg: #172554; --pub-fg: #93c5fd; --ind-bg: #3b0764; --ind-fg: #d8b4fe;
+    --up: #34d399; --down: #f87171;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0b1120; --card: #131c2e; --line: #26324a; --line-soft: #1b2538;
+  --text: #e2e8f0; --muted: #94a3b8; --faint: #64748b;
+  --accent: #a5b4fc; --accent-soft: #1e1b4b;
+  --gold: #fbbf24; --gold-soft: #2a2110; --gold-line: #92610c;
+  --pub-bg: #172554; --pub-fg: #93c5fd; --ind-bg: #3b0764; --ind-fg: #d8b4fe;
+  --up: #34d399; --down: #f87171;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body {
+  margin: 0; background: var(--bg); color: var(--text);
+  font: 15px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  -webkit-text-size-adjust: 100%;
+}
+.wrap { max-width: 1180px; margin: 0 auto; padding: 20px 16px 48px; }
+h1 { font-size: clamp(1.3rem, 4vw, 1.8rem); margin: 0; letter-spacing: -0.02em; }
+h2 { font-size: 1.05rem; margin: 0 0 12px; }
+.sub { color: var(--muted); font-size: 0.875rem; margin: 4px 0 0; }
+header { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; }
+.theme { display: flex; flex: none; padding: 3px; border: 1px solid var(--line); border-radius: 999px; background: var(--card); }
+.theme button { display: grid; place-items: center; width: 34px; height: 30px; border: 0; border-radius: 999px; background: none; color: var(--faint); cursor: pointer; }
+.theme button:hover { color: var(--text); }
+.theme button[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); }
+.theme svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.num { font-variant-numeric: tabular-nums; }
+
+.tabs { display: flex; gap: 6px; margin: 18px 0; padding: 4px; background: var(--line-soft); border-radius: 12px; }
+.tabs button {
+  flex: 1; border: 0; background: none; color: var(--muted); font: inherit; font-weight: 600;
+  padding: 10px 8px; border-radius: 9px; cursor: pointer;
+}
+.tabs button small { display: block; font-weight: 400; font-size: 0.75rem; }
+.tabs button[aria-selected="true"] { background: var(--card); color: var(--text); box-shadow: 0 1px 3px rgb(0 0 0 / 0.12); }
+
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; }
+.kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+.kpi { padding: 14px 16px; }
+.kpi .label { font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--faint); }
+.kpi .value { font-size: 1.6rem; font-weight: 700; line-height: 1.2; margin-top: 2px; }
+.kpi .note { font-size: 0.75rem; color: var(--muted); }
+
+.filters { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)) minmax(0, 1.6fr); gap: 10px; padding: 12px; margin: 16px 0 24px; }
+.filters label { display: block; font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); }
+.filters select, .filters input {
+  width: 100%; margin-top: 4px; padding: 9px 10px; font: inherit; font-size: 16px;
+  color: var(--text); background: var(--card); border: 1px solid var(--line); border-radius: 8px;
+}
+.filters select:focus, .filters input:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+.sort-field { display: none; }
+
+.podium { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; align-items: stretch; margin-bottom: 24px; }
+.medal { padding: 20px; min-height: 190px; display: flex; flex-direction: column; justify-content: space-between; gap: 14px; cursor: pointer; text-align: left; font: inherit; color: inherit; transition: transform 0.15s, box-shadow 0.15s; }
+.medal:hover, .medal:focus-visible { transform: translateY(-3px); box-shadow: 0 8px 20px rgb(0 0 0 / 0.12); outline: none; }
+.medal .place { align-self: flex-start; font-size: 0.72rem; font-weight: 700; padding: 3px 10px; border-radius: 999px; background: var(--line-soft); color: var(--muted); }
+.medal .name { font-weight: 700; font-size: 1.05rem; line-height: 1.25; }
+.medal .where { font-size: 0.78rem; color: var(--muted); }
+.medal .score-row { align-self: stretch; display: flex; justify-content: space-between; align-items: baseline; border-top: 1px solid var(--line-soft); padding-top: 10px; }
+.medal .score-row span { font-size: 0.7rem; font-weight: 700; text-transform: uppercase; color: var(--faint); }
+.medal .score-row b { font-size: 1.3rem; }
+.medal.first { order: 2; border: 2px solid var(--gold-line); background: var(--gold-soft); }
+.medal.first .place { background: var(--gold); color: #fff; }
+.medal.first .name { font-size: 1.2rem; }
+.medal.first .score-row b { font-size: 1.6rem; color: var(--gold); }
+.medal.second { order: 1; }
+.medal.third { order: 3; }
+
+.lists { display: flex; gap: 4px; padding: 0 8px; border-bottom: 1px solid var(--line); overflow-x: auto; }
+.lists button { border: 0; border-bottom: 3px solid transparent; background: none; color: var(--muted); font: inherit; font-weight: 600; padding: 14px 10px 11px; cursor: pointer; white-space: nowrap; }
+.lists button:hover { color: var(--text); }
+.lists button[aria-selected="true"] { color: var(--accent); border-bottom-color: var(--accent); }
+.lists button span { margin-left: 6px; padding: 1px 8px; border-radius: 999px; font-size: 0.75rem; background: var(--line-soft); color: var(--muted); }
+.hint { margin: 0; padding: 10px 16px; font-size: 0.82rem; color: var(--muted); }
+table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+th {
+  text-align: left; font-size: 0.68rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em;
+  color: var(--muted); background: var(--line-soft); padding: 10px 12px; white-space: nowrap;
+}
+th[data-sort] { cursor: pointer; user-select: none; }
+th[data-sort]::after { content: " ↕"; opacity: 0.4; }
+th[aria-sort="ascending"]::after { content: " ↑"; opacity: 1; }
+th[aria-sort="descending"]::after { content: " ↓"; opacity: 1; }
+td { padding: 11px 12px; border-top: 1px solid var(--line-soft); vertical-align: middle; }
+.r { text-align: right; }
+.c { text-align: center; }
+.rank { font-weight: 700; color: var(--muted); white-space: nowrap; }
+.rank b { display: inline-grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; color: #fff; }
+.rank .m1 { background: #d4a017; } .rank .m2 { background: #8a97a8; } .rank .m3 { background: #b0703a; }
+tbody tr.row { cursor: pointer; transition: background-color 0.12s; }
+tbody tr.row:hover, tbody tr.row:focus-visible { background: var(--accent-soft); outline: none; }
+tbody tr.row:hover .school, tbody tr.row:focus-visible .school { color: var(--accent); }
+.cell-note { display: block; font-size: 0.72rem; font-weight: 400; color: var(--faint); }
+.bar { height: 5px; margin-top: 5px; border-radius: 999px; background: var(--line); overflow: hidden; min-width: 70px; }
+.bar i { display: block; height: 100%; border-radius: 999px; background: var(--up); }
+.trend { display: inline-flex; align-items: center; gap: 8px; }
+.delta { font-size: 0.75rem; font-weight: 700; text-align: left; line-height: 1.2; color: var(--muted); }
+.delta.up { color: var(--up); } .delta.down { color: var(--down); }
+.delta small { display: block; font-weight: 400; color: var(--faint); }
+.school { font-weight: 600; }
+.school small { display: none; font-weight: 400; color: var(--muted); }
+.muted { color: var(--muted); }
+.score { font-weight: 700; color: var(--accent); }
+.badge { display: inline-block; font-size: 0.7rem; font-weight: 700; padding: 2px 8px; border-radius: 999px; white-space: nowrap; }
+.badge.P { background: var(--pub-bg); color: var(--pub-fg); }
+.badge.I { background: var(--ind-bg); color: var(--ind-fg); }
+.spark { display: block; overflow: visible; flex: none; }
+.spark polyline { fill: none; stroke: var(--accent); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.spark circle { fill: var(--accent); }
+.spark.up polyline { stroke: var(--up); } .spark.up circle { fill: var(--up); }
+.spark.down polyline { stroke: var(--down); } .spark.down circle { fill: var(--down); }
+
+dialog { width: min(640px, calc(100vw - 24px)); max-height: calc(100dvh - 24px); padding: 0; border: 0; border-radius: 16px; background: var(--card); color: var(--text); box-shadow: 0 24px 60px rgb(0 0 0 / 0.3); }
+dialog::backdrop { background: rgb(15 23 42 / 0.55); backdrop-filter: blur(2px); }
+.modal { padding: 22px; }
+.modal-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+.modal h3 { font-size: 1.3rem; margin: 8px 0 2px; letter-spacing: -0.01em; }
+.x { border: 0; background: none; color: var(--muted); font-size: 1.6rem; line-height: 1; padding: 4px 8px; border-radius: 8px; cursor: pointer; }
+.x:hover { background: var(--line-soft); color: var(--text); }
+.headline { display: flex; gap: 8px 24px; flex-wrap: wrap; margin: 16px 0; }
+.headline div > span:first-child { display: block; font-size: 0.68rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--faint); }
+.headline div b { font-size: 1.5rem; }
+.boxes { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.box { border: 1px solid var(--line); border-radius: 12px; padding: 14px; }
+.box h4 { margin: 0 0 8px; font-size: 0.9rem; }
+.box p { display: flex; justify-content: space-between; gap: 8px; margin: 4px 0; font-size: 0.875rem; color: var(--muted); }
+.box p b { color: var(--text); }
+.box.wide { grid-column: 1 / -1; }
+.box.part { display: flex; justify-content: space-between; align-items: center; gap: 12px; background: var(--accent-soft); border-color: transparent; }
+.box.part small { color: var(--muted); }
+.pill { font-weight: 700; font-size: 1.05rem; padding: 4px 10px; border-radius: 8px; background: var(--accent); color: var(--card); }
+.levels { display: flex; height: 12px; border-radius: 999px; overflow: hidden; margin: 6px 0 8px; }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 0.78rem; color: var(--muted); }
+.legend i { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 5px; }
+.history { margin-top: 4px; font-size: 0.85rem; }
+.history td, .history th { padding: 6px 8px; }
+.history th { background: none; }
+.history tr.now td { font-weight: 700; background: var(--accent-soft); }
+.modal-foot { display: flex; justify-content: flex-end; margin-top: 16px; }
+.close { border: 0; border-radius: 10px; background: var(--text); color: var(--bg); font: inherit; font-weight: 600; padding: 10px 20px; cursor: pointer; }
+.more { display: block; width: 100%; border: 0; border-top: 1px solid var(--line); background: none; color: var(--accent); font: inherit; font-weight: 600; padding: 14px; cursor: pointer; }
+.empty { padding: 32px 16px; text-align: center; color: var(--muted); }
+
+details.method { margin-top: 24px; padding: 14px 16px; font-size: 0.875rem; }
+details.method summary { font-weight: 600; cursor: pointer; }
+details.method li { margin: 6px 0; }
+footer { margin-top: 20px; font-size: 0.78rem; color: var(--muted); text-align: center; }
+
+@media (max-width: 900px) {
+  .kpis { grid-template-columns: repeat(2, 1fr); }
+  .filters { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .filters .search { grid-column: 1 / -1; }
+}
+@media (max-width: 720px) {
+  .kpi .value { font-size: 1.35rem; }
+  .podium { grid-template-columns: 1fr; gap: 10px; }
+  .medal.first, .medal.second, .medal.third { order: 0; }
+  .medal { min-height: 0; }
+  .sort-field { display: block; grid-column: 1 / -1; }
+  .col-wide, thead tr { display: none; }
+  .history thead tr { display: table-row; }
+  .school small { display: block; }
+  td { padding: 11px 10px; }
+  .boxes { grid-template-columns: 1fr; }
+  .modal { padding: 18px; }
+  .score { font-size: 1.05rem; }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>BC School Academic Performance Dashboard</h1>
+      <p class="sub" id="subtitle"></p>
+    </div>
+    <div class="theme" role="group" aria-label="Colour theme">
+      <button data-theme-set="light" aria-label="Light mode" title="Light mode">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+      </button>
+      <button data-theme-set="dark" aria-label="Dark mode" title="Dark mode">
+        <svg viewBox="0 0 24 24"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <div class="tabs" role="tablist">
+    <button role="tab" data-view="fsa" aria-selected="true">Elementary<small>Foundation Skills Assessment</small></button>
+    <button role="tab" data-view="grad" aria-selected="false">Secondary<small>Graduation Assessments</small></button>
+  </div>
+
+  <section class="kpis" id="kpis"></section>
+
+  <section class="filters card">
+    <div><label for="f-year">School year</label><select id="f-year"></select></div>
+    <div><label for="f-group" id="l-group"></label><select id="f-group"></select></div>
+    <div><label for="f-sector">Sector</label>
+      <select id="f-sector">
+        <option value="">All sectors</option>
+        <option value="P">Public</option>
+        <option value="I">Independent</option>
+      </select>
+    </div>
+    <div><label for="f-district">District</label><select id="f-district"></select></div>
+    <div class="search"><label for="f-search">Search</label><input id="f-search" type="search" placeholder="School or district name…" autocomplete="off"></div>
+    <div class="sort-field"><label for="f-sort">Sort by</label><select id="f-sort"></select></div>
+  </section>
+
+  <section>
+    <h2 id="podium-title"></h2>
+    <div class="podium" id="podium"></div>
+  </section>
+
+  <section class="card">
+    <div class="lists" role="tablist">
+      <button role="tab" data-list="ranked">Ranked leaderboard<span id="n-ranked"></span></button>
+      <button role="tab" data-list="excluded">Masked &amp; excluded schools<span id="n-excluded"></span></button>
+    </div>
+    <p class="hint" id="hint"></p>
+    <table id="t-ranked">
+      <thead><tr id="thead"></tr></thead>
+      <tbody id="tbody"></tbody>
+    </table>
+    <table id="t-excluded" hidden>
+      <thead><tr><th>School</th><th class="col-wide">District</th><th class="col-wide">Sector</th><th>Why it has no rank</th><th class="r col-wide" id="x-size"></th></tr></thead>
+      <tbody id="xbody"></tbody>
+    </table>
+    <div class="empty" id="empty" hidden>No schools match these filters.</div>
+    <button class="more" id="more" hidden>Show more</button>
+  </section>
+
+  <dialog id="dialog" aria-labelledby="dialog-name"><div class="modal" id="dialog-body"></div></dialog>
+
+  <details class="card method">
+    <summary>How these numbers are calculated</summary>
+    <ul id="method"></ul>
+  </details>
+
+  <footer>
+    Source: BC Ministry of Education and Child Care open data (school-level results, all students).
+    An unofficial family project — not an official ranking.
+  </footer>
+</div>
+
+<script src="data/fsa.js"></script>
+<script src="data/grad.js"></script>
+<script>
+(function () {
+  'use strict';
+
+  const $ = (id) => document.getElementById(id);
+  const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const fmt = (v, digits) => (v == null ? '—' : v.toFixed(digits));
+  const mean = (values) => (values.length ? values.reduce((a, b) => a + b, 0) / values.length : null);
+  const SECTOR = { P: 'Public', I: 'Independent' };
+  const PAGE = 50;
+  const TREND_YEARS = 5;
+
+  // Each view turns its raw records into rows with a common shape:
+  // { s: school index, y: year index, g: group, score, a, b, part, writers }
+  // where `score` is the ranking metric and a/b are the two extra columns.
+  const VIEWS = {
+    fsa: {
+      data: window.FSA_DATA,
+      subtitle: 'Grade 4 and 7 Foundation Skills Assessment (FSA) results for British Columbia schools.',
+      groupLabel: 'Grade',
+      groups: [[7, 'Grade 7'], [4, 'Grade 4']],
+      row: (r) => ({
+        s: r[0], y: r[1], g: r[2], a: r[3], b: r[4], part: r[5], score: (r[3] + r[4]) / 2,
+        aAvg: r[6], bAvg: r[7], aWriters: r[8], aExpected: r[9], bWriters: r[10], bExpected: r[11],
+      }),
+      note: (row, field) => row[field + 'Writers'] + ' writers',
+      detail: (row) => {
+        const skill = (label, f) => '<div class="box"><h4>' + label + ' assessment</h4>' +
+          '<p>Median score <b class="num">' + row[f].toFixed(1) + '</b></p>' +
+          '<p>Average score <b class="num">' + row[f + 'Avg'].toFixed(1) + '</b></p>' +
+          '<p>Writers <b class="num">' + row[f + 'Writers'] + ' / ' + row[f + 'Expected'] + '</b></p></div>';
+        const wrote = row.aWriters + row.bWriters, expected = row.aExpected + row.bExpected;
+        return skill('Literacy', 'a') + skill('Numeracy', 'b') +
+          participationBox(row.part, wrote + ' tests written of ' + expected + ' expected, across both skills');
+      },
+      sizeLabel: 'Expected writers',
+      scoreLabel: 'Index', scoreDigits: 1,
+      a: { label: 'Literacy', digits: 0 },
+      b: { label: 'Numeracy', digits: 0 },
+      trendLabel: '5-yr trend',
+      trendValue: (row) => row.score,
+      kpiScore: 'Average index score',
+      provinceKpi: (p) => ({ label: 'On track or extending', value: p ? p.proficient.toFixed(1) + '%' : '—', note: 'of all BC writers' }),
+      method: [
+        'Each school gets an <b>Index</b>: the average of its median Literacy score and its median Numeracy score for the chosen grade and year.',
+        '<b>Participation</b> is students who wrote ÷ students expected to write, across both skills.',
+        'A school is ranked only if at least 10 students wrote both Literacy and Numeracy. The Ministry hides results for smaller groups; those schools are listed under “Masked & excluded schools” with the reason.',
+        '<b>Rank</b> is the school’s place among all ranked BC schools for that grade and year. It does not change when you filter by sector or district.',
+        'The trend line shows the school’s Index over up to five years ending at the chosen year; the number beside it is the change from the first of those years to the last.',
+      ],
+    },
+    grad: {
+      data: window.GRAD_DATA,
+      subtitle: 'Grade 10 and 12 Graduation Assessment results for British Columbia secondary schools.',
+      groupLabel: 'Assessment',
+      groups: (window.GRAD_DATA ? window.GRAD_DATA.assessments : []).map((name, i) => [i, name.replace(' Assessment', '')]),
+      row: (r) => ({ s: r[0], y: r[1], g: r[2], score: r[3], a: r[5], b: r[4], part: r[6], levels: r[7], students: r[8] }),
+      note: () => '',
+      detail: (row, prov) => {
+        const names = ['Emerging', 'Developing', 'Proficient', 'Extending'];
+        const colors = ['#ef4444', '#f59e0b', '#10b981', '#6366f1'];
+        const levels = row.levels
+          ? '<div class="levels">' + row.levels.map((n, i) => '<i style="width:' + (100 * n / row.b) + '%;background:' + colors[i] + '"></i>').join('') + '</div>' +
+            '<div class="legend">' + row.levels.map((n, i) => '<span><i style="background:' + colors[i] + '"></i>' + names[i] + ' ' + n + '</span>').join('') + '</div>'
+          : '<p>The Ministry hides the breakdown when any level has only a few students.</p>';
+        return '<div class="box"><h4>Score</h4>' +
+          '<p>School mean <b class="num">' + row.score.toFixed(2) + '</b></p>' +
+          '<p>BC mean <b class="num">' + (prov ? prov.mean.toFixed(2) : '—') + '</b></p>' +
+          '<p>Writers <b class="num">' + row.b + '</b></p></div>' +
+          '<div class="box"><h4>Proficiency levels</h4>' + levels + '</div>' +
+          participationBox(row.part, row.students == null ? '' : 'Ministry figure, out of ' + row.students + ' students in the grade');
+      },
+      sizeLabel: 'Students in grade',
+      scoreLabel: 'Mean score', scoreDigits: 1,
+      a: { label: 'Proficient+', digits: 0, suffix: '%' },
+      b: { label: 'Writers', digits: 0 },
+      trendLabel: 'Trend vs BC',
+      trendValue: (row, province) => (province ? row.score - province.mean : null),
+      kpiScore: 'Average mean score',
+      provinceKpi: (p) => ({ label: 'Proficient or extending', value: p && p.proficient != null ? p.proficient.toFixed(1) + '%' : '—', note: 'of all BC writers' + (p ? ' · BC mean ' + p.mean.toFixed(1) : '') }),
+      method: [
+        '<b>Mean score</b> is the school’s total assessment score ÷ number of writers. Schools are ranked on it separately for each assessment, because the three assessments use different score scales.',
+        '<b>Proficient+</b> is the share of writers rated Proficient or Extending. The Ministry hides small counts, so many schools show “—” here.',
+        '<b>Participation</b> is the Ministry’s published participation rate for that assessment.',
+        'A school is ranked only if at least 10 students wrote. Literacy uses the English-language assessment; Numeracy combines English and French writers.',
+        'The trend line shows the school’s mean score minus the BC mean for up to five years, because the score scale shifts from year to year. Green means it gained on the province, red means it slipped.',
+      ],
+    },
+  };
+
+  // Indexed by the reason code in each data file's "excluded" rows.
+  const REASONS = [
+    'Results hidden by the Ministry (small group)',
+    'Fewer than 10 students wrote',
+    'No students wrote the assessment',
+    'Only one of the two skills was reported',
+  ];
+
+  const SORTS = [
+    ['rank', 'Rank'], ['name', 'School name'], ['score', null], ['a', null], ['b', null], ['part', 'Participation'],
+  ];
+
+  Object.values(VIEWS).forEach(prepare);
+
+  function prepare(view) {
+    const d = view.data;
+    if (!d) return;
+    view.schools = d.schools.map(([name, district, sector, code]) => ({
+      name, sector, district, code,
+      districtLabel: (d.districts[district] || 'District') + ' (SD ' + Number(district) + ')',
+    }));
+    view.byKey = new Map();      // "year|group" -> rows ranked by score
+    view.bySchool = new Map();   // "school|group" -> rows indexed by year
+    for (const record of d.records) {
+      const row = view.row(record);
+      const key = row.y + '|' + row.g;
+      if (!view.byKey.has(key)) view.byKey.set(key, []);
+      view.byKey.get(key).push(row);
+      const skey = row.s + '|' + row.g;
+      if (!view.bySchool.has(skey)) view.bySchool.set(skey, []);
+      view.bySchool.get(skey)[row.y] = row;
+    }
+    view.excluded = new Map();   // "year|group" -> unranked schools, by name
+    for (const [s, y, g, reason, size] of d.excluded) {
+      const key = y + '|' + g;
+      if (!view.excluded.has(key)) view.excluded.set(key, []);
+      view.excluded.get(key).push({ s, reason, size });
+    }
+    for (const rows of view.excluded.values()) rows.sort((x, y) => view.schools[x.s].name.localeCompare(view.schools[y.s].name));
+    for (const rows of view.byKey.values()) {
+      rows.sort((x, y) => y.score - x.score);
+      rows.forEach((row, i) => { row.rank = i > 0 && rows[i - 1].score === row.score ? rows[i - 1].rank : i + 1; });
+    }
+    view.state = {
+      year: d.years.length - 1, group: view.groups[0][0], sector: '', district: '', search: '',
+      sort: 'rank', asc: true, shown: PAGE, list: 'ranked',
+    };
+  }
+
+  let current = 'fsa';
+
+  function province(view, year, group) {
+    return view.data.province[view.data.years[year] + '|' + group];
+  }
+
+  function participationBox(part, text) {
+    return '<div class="box wide part"><div><b>Participation rate</b><br><small>' + esc(text) + '</small></div>' +
+      '<span class="pill num">' + (part == null ? '—' : part.toFixed(1) + '%') + '</span></div>';
+  }
+
+  // Sparkline plus the change between its first and last year.
+  function trend(view, row) {
+    const line = sparkline(view, row);
+    if (!line) return '<span class="muted">—</span>';
+    const cls = line.change > 0 ? 'up' : line.change < 0 ? 'down' : '';
+    return '<span class="trend">' + line.html + '<span class="delta num ' + cls + '">' + (line.change > 0 ? '+' : '') + line.change.toFixed(1) +
+      '<small>' + line.years + ' yrs</small></span></span>';
+  }
+
+  function sparkline(view, row) {
+    const history = view.bySchool.get(row.s + '|' + row.g) || [];
+    const points = [];
+    for (let y = Math.max(0, row.y - TREND_YEARS + 1); y <= row.y; y++) {
+      if (!history[y]) continue;
+      const value = view.trendValue(history[y], province(view, y, row.g));
+      if (value != null) points.push([y, value]);
+    }
+    if (points.length < 2) return null;
+    const W = 64, H = 22, pad = 3;
+    const values = points.map((p) => p[1]);
+    const min = Math.min(...values), max = Math.max(...values);
+    const x0 = points[0][0], span = (points[points.length - 1][0] - x0) || 1;
+    const xy = points.map(([y, v]) => [
+      pad + ((y - x0) / span) * (W - 2 * pad),
+      max === min ? H / 2 : H - pad - ((v - min) / (max - min)) * (H - 2 * pad),
+    ]);
+    const change = values[values.length - 1] - values[0];
+    const cls = change > 0 ? 'up' : change < 0 ? 'down' : '';
+    const years = view.data.years;
+    const title = points.map(([y, v]) => years[y] + ': ' + (view === VIEWS.grad && v > 0 ? '+' : '') + v.toFixed(1)).join('\n');
+    const last = xy[xy.length - 1];
+    const html = '<svg class="spark ' + cls + '" width="' + W + '" height="' + H + '" role="img" aria-label="' + esc(title.replace(/\n/g, ', ')) + '">' +
+      '<title>' + esc(title) + '</title>' +
+      '<polyline points="' + xy.map((p) => p[0].toFixed(1) + ',' + p[1].toFixed(1)).join(' ') + '"/>' +
+      '<circle cx="' + last[0].toFixed(1) + '" cy="' + last[1].toFixed(1) + '" r="2.5"/></svg>';
+    return { html, change, years: points[points.length - 1][0] - x0 + 1 };
+  }
+
+  function cellWithNote(view, row, field) {
+    const note = row[field] == null ? '' : view.note(row, field);
+    return cell(view, row, field) + (note ? '<span class="cell-note">' + note + '</span>' : '');
+  }
+
+  function openDetail(view, row) {
+    const school = view.schools[row.s], years = view.data.years;
+    const total = (y) => view.byKey.get(y + '|' + row.g).length;
+    const history = (view.bySchool.get(row.s + '|' + row.g) || []).filter(Boolean).reverse().map((h) =>
+      '<tr class="' + (h.y === row.y ? 'now' : '') + '"><td>' + years[h.y] + '</td><td class="r num">' + fmt(h.score, view.scoreDigits) +
+      '</td><td class="r num">#' + h.rank + ' of ' + total(h.y) + '</td></tr>').join('');
+    const group = view.groups.find((g) => g[0] === row.g)[1];
+    $('dialog-body').innerHTML =
+      '<div class="modal-top"><span class="badge ' + school.sector + '">' + SECTOR[school.sector] + ' school</span>' +
+      '<button class="x" data-close aria-label="Close">×</button></div>' +
+      '<h3 id="dialog-name">' + esc(school.name) + '</h3>' +
+      '<div class="muted">' + esc(school.districtLabel) + ' · School code ' + esc(school.code) + '</div>' +
+      '<div class="headline"><div><span>' + esc(group) + ' · ' + years[row.y] + '</span><b class="num score">' + fmt(row.score, view.scoreDigits) + '</b> ' + esc(view.scoreLabel.toLowerCase()) + '</div>' +
+      '<div><span>BC rank</span><b class="num">#' + row.rank + '</b> of ' + total(row.y) + '</div>' +
+      '<div><span>' + esc(view.trendLabel) + '</span>' + trend(view, row) + '</div></div>' +
+      '<div class="boxes">' + view.detail(row, province(view, row.y, row.g)) +
+      '<div class="box wide"><h4>Year by year · ' + esc(group) + '</h4><table class="history"><thead><tr><th>Year</th><th class="r">' +
+      esc(view.scoreLabel) + '</th><th class="r">BC rank</th></tr></thead><tbody>' + history + '</tbody></table></div></div>' +
+      '<div class="modal-foot"><button class="close" data-close>Close</button></div>';
+    $('dialog').showModal();
+    $('dialog').scrollTop = 0;
+  }
+
+  function cell(view, row, field) {
+    const spec = view[field];
+    return row[field] == null ? '—' : fmt(row[field], spec.digits) + (spec.suffix || '');
+  }
+
+  function renderFilters() {
+    const view = VIEWS[current], st = view.state, d = view.data;
+    $('subtitle').textContent = view.subtitle;
+    $('l-group').textContent = view.groupLabel;
+    $('f-year').innerHTML = d.years.map((y, i) => '<option value="' + i + '">' + y + '</option>').reverse().join('');
+    $('f-group').innerHTML = view.groups.map(([v, label]) => '<option value="' + v + '">' + esc(label) + '</option>').join('');
+    const used = new Set(view.schools.map((s) => s.district));
+    const districts = [...used].map((n) => [n, view.schools.find((s) => s.district === n).districtLabel])
+      .sort((x, y) => x[1].localeCompare(y[1]));
+    $('f-district').innerHTML = '<option value="">All districts</option>' +
+      districts.map(([n, label]) => '<option value="' + n + '">' + esc(label) + '</option>').join('');
+    $('f-sort').innerHTML = SORTS.map(([field, label]) =>
+      '<option value="' + field + '">' + esc(label || (field === 'score' ? view.scoreLabel : view[field].label)) + '</option>').join('');
+    $('f-year').value = st.year; $('f-group').value = st.group; $('f-sector').value = st.sector;
+    $('f-district').value = st.district; $('f-search').value = st.search; $('f-sort').value = st.sort;
+    $('x-size').textContent = view.sizeLabel;
+    $('method').innerHTML = view.method.map((m) => '<li>' + m + '</li>').join('');
+
+    const th = (label, cls, sort) => '<th class="' + cls + '"' + (sort ? ' data-sort="' + sort + '"' : '') + '>' + esc(label) + '</th>';
+    $('thead').innerHTML =
+      th('Rank', '', 'rank') + th('School', '', 'name') + th('District', 'col-wide') + th('Sector', 'col-wide') +
+      th(view.a.label, 'r col-wide', 'a') + th(view.b.label, 'r col-wide', 'b') + th('Part. %', 'r col-wide', 'part') +
+      th(view.scoreLabel, 'r', 'score') + th(view.trendLabel, 'c col-wide');
+  }
+
+  function render() {
+    const view = VIEWS[current], st = view.state;
+    const all = view.byKey.get(st.year + '|' + st.group) || [];
+    const inScope = (row) => {
+      const school = view.schools[row.s];
+      return (!st.sector || school.sector === st.sector) && (!st.district || school.district === st.district);
+    };
+    const q = st.search.trim().toLowerCase();
+    const matches = (row) => {
+      const school = view.schools[row.s];
+      return !q || school.name.toLowerCase().includes(q) || school.districtLabel.toLowerCase().includes(q);
+    };
+    const scoped = all.filter(inScope);
+    const rows = scoped.filter(matches);
+    const excluded = (view.excluded.get(st.year + '|' + st.group) || []).filter(inScope).filter(matches);
+
+    const dir = st.asc ? 1 : -1;
+    rows.sort((x, y) => {
+      if (st.sort === 'name') return dir * view.schools[x.s].name.localeCompare(view.schools[y.s].name);
+      const vx = x[st.sort], vy = y[st.sort];
+      if (vx == null || vy == null) return (vx == null) - (vy == null);   // blanks always last
+      return dir * (vx - vy) || x.rank - y.rank;
+    });
+
+    // KPI cards and podium follow the dropdown filters but not the search box.
+    const prov = view.provinceKpi(province(view, st.year, st.group));
+    const kpis = [
+      { label: 'Ranked schools', value: scoped.length.toLocaleString(), note: scoped.length === all.length ? 'province-wide' : 'of ' + all.length.toLocaleString() + ' in BC' },
+      { label: view.kpiScore, value: fmt(mean(scoped.map((r) => r.score)), 1), note: 'across these schools' },
+      { label: 'Mean participation', value: (() => { const m = mean(scoped.map((r) => r.part).filter((v) => v != null)); return m == null ? '—' : m.toFixed(1) + '%'; })(), note: 'across these schools' },
+      prov,
+    ];
+    $('kpis').innerHTML = kpis.map((k) =>
+      '<div class="card kpi"><div class="label">' + esc(k.label) + '</div><div class="value num">' + esc(k.value) + '</div><div class="note">' + esc(k.note) + '</div></div>').join('');
+
+    const scopeName = [st.sector && SECTOR[st.sector], st.district && view.schools.find((s) => s.district === st.district).districtLabel]
+      .filter(Boolean).join(' · ');
+    $('podium-title').textContent = '🏆 Top performers' + (scopeName ? ' — ' + scopeName : ' in BC');
+    const places = [['first', '#1 Champion'], ['second', '#2 Silver'], ['third', '#3 Bronze']];
+    $('podium').innerHTML = scoped.slice(0, 3).map((row, i) => {
+      const school = view.schools[row.s];
+      return '<button class="card medal ' + places[i][0] + '" data-s="' + row.s + '"><span class="place">' + places[i][1] + '</span>' +
+        '<div><div class="name">' + esc(school.name) + '</div><div class="where">' + esc(school.districtLabel) + ' · ' + SECTOR[school.sector] + '</div></div>' +
+        '<div class="score-row"><span>' + esc(view.scoreLabel) + '</span><b class="num">' + fmt(row.score, view.scoreDigits) + '</b></div></button>';
+    }).join('');
+
+    const ranked = st.list === 'ranked';
+    const listed = ranked ? rows : excluded;
+    $('n-ranked').textContent = rows.length.toLocaleString();
+    $('n-excluded').textContent = excluded.length.toLocaleString();
+    document.querySelectorAll('.lists button').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.list === st.list)));
+    $('t-ranked').hidden = !ranked;
+    $('t-excluded').hidden = ranked;
+    $('hint').textContent = ranked
+      ? 'Select any school for its full results.'
+      : 'These schools appear in the Ministry data for this year but cannot be ranked.';
+    $('xbody').innerHTML = ranked ? '' : excluded.slice(0, st.shown).map((row) => {
+      const school = view.schools[row.s];
+      return '<tr><td class="school">' + esc(school.name) + '<small>' + esc(school.districtLabel) + ' · ' + SECTOR[school.sector] + '</small></td>' +
+        '<td class="col-wide muted">' + esc(school.districtLabel) + '</td>' +
+        '<td class="col-wide"><span class="badge ' + school.sector + '">' + SECTOR[school.sector] + '</span></td>' +
+        '<td class="muted">' + REASONS[row.reason] + '</td>' +
+        '<td class="col-wide r num">' + (row.size == null ? '—' : row.size) + '</td></tr>';
+    }).join('');
+    $('tbody').innerHTML = !ranked ? '' : rows.slice(0, st.shown).map((row) => {
+      const school = view.schools[row.s];
+      const badge = '<span class="badge ' + school.sector + '">' + SECTOR[school.sector] + '</span>';
+      const rank = row.rank <= 3 ? '<b class="m' + row.rank + '">' + row.rank + '</b>' : '#' + row.rank;
+      const bar = row.part == null ? '' : '<div class="bar"><i style="width:' + Math.min(100, row.part) + '%"></i></div>';
+      return '<tr class="row" data-s="' + row.s + '" tabindex="0">' +
+        '<td class="rank num">' + rank + '</td>' +
+        '<td class="school">' + esc(school.name) + '<small>' + esc(school.districtLabel) + ' · ' + SECTOR[school.sector] + '</small></td>' +
+        '<td class="col-wide muted">' + esc(school.districtLabel) + '</td>' +
+        '<td class="col-wide">' + badge + '</td>' +
+        '<td class="col-wide r num">' + cellWithNote(view, row, 'a') + '</td>' +
+        '<td class="col-wide r num">' + cellWithNote(view, row, 'b') + '</td>' +
+        '<td class="col-wide r num">' + (row.part == null ? '—' : row.part.toFixed(1) + '%') + bar + '</td>' +
+        '<td class="r num score">' + fmt(row.score, view.scoreDigits) + '</td>' +
+        '<td class="col-wide c">' + trend(view, row) + '</td></tr>';
+    }).join('');
+    $('empty').hidden = listed.length > 0;
+    $('more').hidden = listed.length <= st.shown;
+    $('more').textContent = 'Show more (' + (listed.length - st.shown).toLocaleString() + ' remaining)';
+    document.querySelectorAll('#thead th[data-sort]').forEach((th) => {
+      if (th.dataset.sort === st.sort) th.setAttribute('aria-sort', st.asc ? 'ascending' : 'descending');
+      else th.removeAttribute('aria-sort');
+    });
+    view.scoped = scoped;
+  }
+
+  function update(changes) {
+    Object.assign(VIEWS[current].state, changes, { shown: PAGE });
+    render();
+  }
+
+  function setSort(field) {
+    const st = VIEWS[current].state;
+    // Rank and name read best ascending; every score reads best highest-first.
+    const asc = st.sort === field ? !st.asc : field === 'rank' || field === 'name';
+    update({ sort: field, asc });
+    $('f-sort').value = field;
+  }
+
+  $('f-year').onchange = (e) => update({ year: Number(e.target.value) });
+  $('f-group').onchange = (e) => update({ group: Number(e.target.value) });
+  $('f-sector').onchange = (e) => update({ sector: e.target.value });
+  $('f-district').onchange = (e) => update({ district: e.target.value });
+  $('f-search').oninput = (e) => update({ search: e.target.value });
+  $('f-sort').onchange = (e) => update({ sort: e.target.value, asc: e.target.value === 'rank' || e.target.value === 'name' });
+  $('thead').onclick = (e) => { const th = e.target.closest('th[data-sort]'); if (th) setSort(th.dataset.sort); };
+  $('more').onclick = () => { VIEWS[current].state.shown += 100; render(); };
+  function openFrom(target) {
+    const el = target.closest('[data-s]');
+    if (!el) return;
+    const view = VIEWS[current];
+    openDetail(view, view.scoped.find((r) => r.s === Number(el.dataset.s)));
+  }
+  $('tbody').onclick = (e) => openFrom(e.target);
+  $('tbody').onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openFrom(e.target); } };
+  $('podium').onclick = (e) => openFrom(e.target);
+  // Close on the × / Close buttons, or a click on the dimmed backdrop.
+  $('dialog').onclick = (e) => { if (e.target === $('dialog') || e.target.closest('[data-close]')) $('dialog').close(); };
+  document.querySelectorAll('.lists button').forEach((button) => {
+    button.onclick = () => update({ list: button.dataset.list });
+  });
+
+  // Theme: follows the system until the visitor picks one, then remembers the pick.
+  const systemDark = matchMedia('(prefers-color-scheme: dark)');
+  function showTheme() {
+    const active = document.documentElement.dataset.theme || (systemDark.matches ? 'dark' : 'light');
+    document.querySelectorAll('[data-theme-set]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.themeSet === active)));
+  }
+  document.querySelectorAll('[data-theme-set]').forEach((button) => {
+    button.onclick = () => {
+      document.documentElement.dataset.theme = button.dataset.themeSet;
+      try { localStorage.setItem('theme', button.dataset.themeSet); } catch (e) {}
+      showTheme();
+    };
+  });
+  systemDark.addEventListener('change', showTheme);
+  showTheme();
+
+  document.querySelectorAll('.tabs button').forEach((button) => {
+    button.onclick = () => {
+      current = button.dataset.view;
+      document.querySelectorAll('.tabs button').forEach((b) => b.setAttribute('aria-selected', String(b === button)));
+      renderFilters();
+      render();
+    };
+  });
+
+  if (!VIEWS.fsa.data || !VIEWS.grad.data) {
+    $('empty').hidden = false;
+    $('empty').textContent = 'The data files could not be loaded. Run "python scripts/build_data.py" to create them.';
+    return;
+  }
+  renderFilters();
+  render();
+})();
+</script>
+</body>
+</html>
